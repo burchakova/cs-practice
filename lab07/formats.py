@@ -21,22 +21,25 @@ def _parse_scalar(value: str):
     value = value.strip()
     lowered = value.lower()
 
+    # Булевы значения
     if lowered in ("true", "yes"):
         return True
     if lowered in ("false", "no"):
         return False
 
-    # Пытаемся распознать число (запятые НЕ заменяем, чтобы не ломать строки)
+    # Пытаемся распознать целое число
     try:
         return int(value)
     except ValueError:
         pass
 
+    # Пытаемся распознать дробное число (заменяем запятую на точку для float)
     try:
-        return float(value)
+        return float(value.replace(",", "."))
     except ValueError:
         pass
 
+    # Если не число — возвращаем строку
     return value
 
 
@@ -46,7 +49,7 @@ def parse_settings(lines: list[str]) -> dict:
     current_list_key = None
 
     for raw in lines:
-        # Отбрасываем комментарии
+        # Отбрасываем всё после #
         line = raw.split("#", 1)[0].rstrip()
         if not line.strip():
             continue
