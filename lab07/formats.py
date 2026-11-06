@@ -1,141 +1,94 @@
-# formats.py
+"""Перевод данных между форматами: CSV, простой YAML, JSON."""
 
 import json
 
 
-def _to_typed_value(value_str: str):
-    """Преобразует строку в подходящий тип: int, float, bool или str."""
-    s = value_str.strip()
-    if not s:
-        return s
-
-    # Проверка на целое число
-    if s.isdigit() or (s.startswith('-') and s[1:].isdigit()):
-        return int(s)
-
-    # Проверка на float
-    try:
-        f = float(s)
-        return f
-    except ValueError:
-        pass
-
-    lower = s.lower()
-    if lower in ("true", "yes"):
-        return True
-    if lower in ("false", "no"):
-        return False
-
-    return s
-
-
 def csv_to_records(text: str) -> list[dict]:
-    """
-    CSV с заголовком → список словарей. Значения остаются строками.
-    Разделитель — запятая, кавычек и запятых внутри значений нет.
-    """
-    lines = text.strip().splitlines()
-    if not lines:
-        return []
-
-    headers = lines[0].split(',')
-    records = []
-
+    """CSV с заголовком -> список словарей. Значения остаются строками."""
+    records: list[dict] = []
+    lines = text.strip().split("\n")
+    if not lines or not lines[0].strip():
+        return records
+    headers = [h.strip() for h in lines[0].split(",")]
     for line in lines[1:]:
         if not line.strip():
             continue
-        values = line.split(',')
-        # По условию количество полей совпадает с количеством заголовков
-        record = {headers[i]: values[i] for i in range(len(headers))}
-        records.append(record)
-
+        values = [v.strip() for v in line.split(",")]
+        records.append(dict(zip(headers, values)))
     return records
 
 
+def _parse_value(value: str):
+    """Приводит строковое значение YAML к типу: число, истина/ложь или строка."""
+    value = value.strip()
+    low = value.lower()
+    if low in ("true", "yes"):
+        return True
+    if low in ("false", "no"):
+        return False
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
 def parse_settings(lines: list[str]) -> dict:
-    """
-    Простой YAML (учебное подмножество) → словарь с приведением типов.
-    Поддерживаются: ключ: значение, списки через '- ', комментарии после #.
-    Вложенность не поддерживается.
-    """
-    result = {}
-    i = 0
-    n = len(lines)
+    """Простой YAML -> словарь. Комментарии после # отбрасываются,
+    списки открываются строкой 'ключ:' и заполняются строками '- значение'."""
+    settings: dict = {}
+    current_list: str | None = None
 
-    while i < n:
-        line = lines[i]
+    for raw in lines:
+        # всё после # — комментарий, отбрасываем
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        stripped = line.strip()
 
-        # Удаляем комментарий
-        if '#' in line:
-            line = line[:line.index('#')]
-
-        line_stripped = line.strip()
-        if not line_stripped:
-            i += 1
+        # элемент списка
+        if stripped.startswith("- ") and current_list is not None:
+            settings[current_list].append(_parse_value(stripped[2:]))
             continue
 
-        if ':' in line_stripped:
-            key_part, _, rest = line_stripped.partition(':')
-            key = key_part.strip()
-            rest = rest.strip()
+        if ":" not in stripped:
+            continue
 
-            if rest:
-                # Пара ключ: значение
-                result[key] = _to_typed_value(rest)
-                i += 1
-                continue
-            else:
-                # Ключ без значения — начало списка
-                items = []
-                i += 1
-                while i < n:
-                    next_line = lines[i]
-                    if '#' in next_line:
-                        next_line = next_line[:next_line.index('#')]
-                    next_stripped = next_line.strip()
-                    if next_stripped.startswith('- '):
-                        item_value = next_stripped[2:].strip()
-                        items.append(_to_typed_value(item_value))
-                        i += 1
-                    else:
-                        break
-                result[key] = items
-                continue
+        key, _, value = stripped.partition(":")
+        key = key.strip()
+        value = value.strip()
+        if value == "":
+            # ключ без значения открывает список
+            settings[key] = []
+            current_list = key
+        else:
+            settings[key] = _parse_value(value)
+            current_list = None
 
-        i += 1
-
-    return result
+    return settings
 
 
 def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
-    """
-    Дополняет записи сведениями из словаря extra по значению ключа key.
-    Поля самой записи имеют приоритет (не перезаписываются).
-    Записи без пары в extra остаются без изменений.
-    """
-    merged = []
+    """Дополняет записи сведениями из справочника extra по ключу key.
+    Поля самой записи важнее: если ключ есть и там, и там, остаётся значение из записи."""
+    merged: list[dict] = []
     for row in rows:
-        new_row = dict(row)  # копия, чтобы не менять оригинал
-        lookup_key = row.get(key)
-        if lookup_key is not None and lookup_key in extra:
-            extra_data = extra[lookup_key]
-            for k, v in extra_data.items():
-                if k not in new_row:
-                    new_row[k] = v
-        merged.append(new_row)
+        record = dict(row)
+        lookup = record.get(key)
+        addition = extra.get(lookup)
+        if addition is not None:
+            # сначала справочник, потом запись — запись перекрывает
+            record = {**addition, **record}
+        merged.append(record)
     return merged
 
 
 def records_to_json(records: list[dict]) -> str:
-    """
-    Список словарей → JSON-строка.
-    - Ключи в каждом объекте отсортированы по алфавиту.
-    - Отступ — 2 пробела.
-    - Кириллица не экранируется.
-    """
-    return json.dumps(
-        records,
-        sort_keys=True,
-        indent=2,
-        ensure_ascii=False
-    )
+    """Список словарей -> JSON: отступ 2, ключи по алфавиту, кириллица как есть."""
+    return json.dumps(records, ensure_ascii=False, indent=2, sort_keys=True)
+
+   
