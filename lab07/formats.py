@@ -1,25 +1,24 @@
-"""Перевод данных между форматами: CSV, простой YAML, JSON."""
-
 import json
 
-
 def csv_to_records(text: str) -> list[dict]:
-    """CSV с заголовком -> список словарей. Значения остаются строками."""
-    records: list[dict] = []
+    records = 
     lines = text.strip().split("\n")
-    if not lines or not lines[0].strip():
+    if not lines or not lines.strip():
         return records
-    headers = [h.strip() for h in lines[0].split(",")]
+    
+    headers = [h.strip() for h in lines.split(",")]
+    
     for line in lines[1:]:
         if not line.strip():
             continue
         values = [v.strip() for v in line.split(",")]
+        # Важно: zip остановится на минимальной длине, если вдруг колонок не хватает
         records.append(dict(zip(headers, values)))
+        
     return records
 
 
 def _parse_value(value: str):
-    """Приводит строковое значение YAML к типу: число, истина/ложь или строка."""
     value = value.strip()
     if not value:
         return value
@@ -35,7 +34,8 @@ def _parse_value(value: str):
     except ValueError:
         pass
 
-    # float только если разделитель — точка; "3,5" остаётся строкой
+    # ГЛАВНОЕ ИСПРАВЛЕНИЕ: float только если есть точка. 
+    # "3,5" не пройдет эту проверку и останется строкой.
     if "." in value:
         try:
             return float(value)
@@ -46,19 +46,18 @@ def _parse_value(value: str):
 
 
 def parse_settings(lines: list[str]) -> dict:
-    """Простой YAML -> словарь. Комментарии после # отбрасываются,
-    списки открываются строкой 'ключ:' и заполняются строками '- значение'."""
-    settings: dict = {}
-    current_list: str | None = None
+    settings = {}
+    current_list = None
 
     for raw in lines:
-        # 1. Всё после # — комментарий, отбрасываем (сначала это, потом всё остальное)
-        line = raw.split("#", 1)[0].rstrip()
+        # Сначала убираем комментарий (#)
+        line = raw.split("#", 1).rstrip()
         if not line.strip():
             continue
+        
         stripped = line.strip()
 
-        # 2. Элемент списка
+        # Обработка списка (- элемент)
         if stripped.startswith("- ") and current_list is not None:
             settings[current_list].append(_parse_value(stripped[2:]))
             continue
@@ -66,14 +65,13 @@ def parse_settings(lines: list[str]) -> dict:
         if ":" not in stripped:
             continue
 
-        # 3. Пара "ключ: значение"
         key, _, value = stripped.partition(":")
         key = key.strip()
         value = value.strip()
 
         if value == "":
-            # Ключ без значения открывает список
-            settings[key] = []
+            # Открываем список
+            settings[key] = 
             current_list = key
         else:
             settings[key] = _parse_value(value)
@@ -83,19 +81,25 @@ def parse_settings(lines: list[str]) -> dict:
 
 
 def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
-    """Дополняет записи сведениями из справочника extra по ключу key.
-    Поля самой записи важнее: если ключ есть и там, и там, остаётся значение из записи."""
-    merged: list[dict] = []
+    merged = 
     for row in rows:
         record = dict(row)
-        addition = extra.get(record.get(key))
+        lookup_id = record.get(key)
+        addition = extra.get(lookup_id)
+        
         if addition is not None:
-            # сначала справочник, потом запись — запись перекрывает
+            # Справочник + Запись. Запись (справа) перекрывает справочник
             record = {**addition, **record}
+            
         merged.append(record)
     return merged
 
 
 def records_to_json(records: list[dict]) -> str:
-    """Список словарей -> JSON: отступ 2, ключи по алфавиту, кириллица как есть."""
     return json.dumps(records, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+
+
+
+      
