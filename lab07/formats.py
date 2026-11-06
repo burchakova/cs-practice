@@ -2,18 +2,16 @@ import json
 
 def csv_to_records(text: str) -> list[dict]:
     """CSV с заголовком → список словарей. Значения остаются строками."""
-    lines = text.strip().splitlines()
-    if not lines or not lines[0].strip():
+    lines = [line for line in text.strip().splitlines() if line.strip()]
+    if not lines:
         return []
 
-    # Убираем пробелы вокруг заголовков
+    # Обрезаем пробелы у заголовков
     header = [h.strip() for h in lines[0].split(",")]
-    records = []
     
+    records = []
     for line in lines[1:]:
-        if not line.strip():
-            continue
-        # Убираем пробелы вокруг самих значений
+        # Обрезаем пробелы у каждого значения
         values = [v.strip() for v in line.split(",")]
         records.append(dict(zip(header, values)))
         
@@ -21,22 +19,21 @@ def csv_to_records(text: str) -> list[dict]:
 
 
 def _parse_scalar(value: str):
-    """Приводит строку к числу, иначе оставляет строкой."""
+    """Приводит к int/float, иначе оставляет строкой (без true/false)."""
     value = value.strip()
-    
-    # Попытка распознать целое число
+    if not value:
+        return ""
+
     try:
         return int(value)
     except ValueError:
         pass
-        
-    # Попытка распознать дробное число
+
     try:
         return float(value)
     except ValueError:
         pass
-        
-    # Если не число — возвращаем как есть (булевы оставляем строками)
+
     return value
 
 
@@ -46,7 +43,7 @@ def parse_settings(lines: list[str]) -> dict:
     current_list_key = None
 
     for raw in lines:
-        # Отбрасываем всё после #
+        # Отбрасываем комментарии
         line = raw.split("#", 1)[0].rstrip()
         if not line.strip():
             continue
@@ -84,7 +81,7 @@ def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
     for row in rows:
         row_key = str(row.get(key, ""))
         addition = extra.get(row_key, {})
-        # Поля самой записи важнее, поэтому row обновляет addition
+        # Поля самой записи важнее (row переопределяет addition)
         merged = {**addition, **row}
         result.append(merged)
     return result
