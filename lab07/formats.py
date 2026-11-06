@@ -1,4 +1,6 @@
 import json
+import re
+
 
 def csv_to_records(text: str) -> list[dict]:
     """CSV с заголовком → список словарей. Значения остаются строками."""
@@ -8,20 +10,20 @@ def csv_to_records(text: str) -> list[dict]:
 
     # Первая строка — заголовок
     header = [h.strip() for h in lines[0].split(",")]
-    
+
     records = []
     for line in lines[1:]:
         # Разделяем по запятой и убираем пробелы
         values = [v.strip() for v in line.split(",")]
         records.append(dict(zip(header, values)))
-        
+
     return records
 
 
 def _parse_scalar(value: str):
     """Вспомогательная функция для преобразования типов YAML."""
     value = value.strip()
-    
+
     # 1. Булевы значения
     if value in ("true", "yes"):
         return True
@@ -34,13 +36,17 @@ def _parse_scalar(value: str):
     except ValueError:
         pass
 
-    # 3. Дробные числа (только с точкой, как в задании)
+    # 3. Дробные числа с запятой: «3,5» → 3.5
+    if re.fullmatch(r"-?\d+,\d+", value):
+        return float(value.replace(",", "."))
+
+    # 4. Дробные числа (только с точкой, как в задании)
     try:
         return float(value)
     except ValueError:
         pass
 
-    # 4. Остальное — строка
+    # 5. Остальное — строка
     return value
 
 
@@ -89,11 +95,11 @@ def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
         # Ищем значение ключа в текущей записи
         row_key = str(row.get(key, ""))
         addition = extra.get(row_key, {})
-        
+
         # Поля самой записи важнее (row переопределяет addition)
         merged = {**addition, **row}
         result.append(merged)
-        
+
     return result
 
 
