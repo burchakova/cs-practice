@@ -1,32 +1,30 @@
+"""Работа с форматами данных: CSV, JSON, учебный YAML."""
+
 import json
 
+
 def csv_to_records(text: str) -> list[dict]:
-    records = 
-    lines = text.strip().split("\n")
-    if not lines or not lines.strip():
-        return records
-    
-    headers = [h.strip() for h in lines.split(",")]
-    
+    """CSV с заголовком → список словарей. Значения остаются строками."""
+    lines = [line for line in text.strip().splitlines() if line.strip()]
+    if not lines:
+        return []
+
+    header = lines[0].split(",")
+    records = []
     for line in lines[1:]:
-        if not line.strip():
-            continue
-        values = [v.strip() for v in line.split(",")]
-        # Важно: zip остановится на минимальной длине, если вдруг колонок не хватает
-        records.append(dict(zip(headers, values)))
-        
+        values = line.split(",")
+        records.append(dict(zip(header, values)))
     return records
 
 
-def _parse_value(value: str):
+def _parse_scalar(value: str):
+    """Приводит строку к числу/булеву/строке по правилам учебного YAML."""
     value = value.strip()
-    if not value:
-        return value
+    lowered = value.lower()
 
-    low = value.lower()
-    if low in ("true", "yes"):
+    if lowered in ("true", "yes"):
         return True
-    if low in ("false", "no"):
+    if lowered in ("false", "no"):
         return False
 
     try:
@@ -34,32 +32,29 @@ def _parse_value(value: str):
     except ValueError:
         pass
 
-    # ГЛАВНОЕ ИСПРАВЛЕНИЕ: float только если есть точка. 
-    # "3,5" не пройдет эту проверку и останется строкой.
-    if "." in value:
-        try:
-            return float(value)
-        except ValueError:
-            pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
 
     return value
 
 
 def parse_settings(lines: list[str]) -> dict:
-    settings = {}
-    current_list = None
+    """Простой YAML: «ключ: значение», списки через «- », комментарии после #."""
+    settings: dict = {}
+    current_list_key = None
 
     for raw in lines:
-        # Сначала убираем комментарий (#)
-        line = raw.split("#", 1).rstrip()
+        line = raw.split("#", 1)[0].rstrip()
         if not line.strip():
             continue
-        
+
         stripped = line.strip()
 
-        # Обработка списка (- элемент)
-        if stripped.startswith("- ") and current_list is not None:
-            settings[current_list].append(_parse_value(stripped[2:]))
+        if stripped.startswith("- "):
+            if current_list_key is not None:
+                settings[current_list_key].append(_parse_scalar(stripped[2:]))
             continue
 
         if ":" not in stripped:
@@ -70,36 +65,32 @@ def parse_settings(lines: list[str]) -> dict:
         value = value.strip()
 
         if value == "":
-            # Открываем список
-            settings[key] = 
-            current_list = key
+            settings[key] = []
+            current_list_key = key
         else:
-            settings[key] = _parse_value(value)
-            current_list = None
+            settings[key] = _parse_scalar(value)
+            current_list_key = None
 
     return settings
 
 
 def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
-    merged = 
+    """Дополняет записи сведениями из справочника extra по значению ключа key.
+
+    Поля самой записи важнее: при совпадении остаётся значение из записи.
+    """
+    result = []
     for row in rows:
-        record = dict(row)
-        lookup_id = record.get(key)
-        addition = extra.get(lookup_id)
-        
-        if addition is not None:
-            # Справочник + Запись. Запись (справа) перекрывает справочник
-            record = {**addition, **record}
-            
-        merged.append(record)
-    return merged
+        row_key = str(row.get(key, ""))
+        addition = extra.get(row_key, {})
+        merged = {**addition, **row}
+        result.append(merged)
+    return result
 
 
 def records_to_json(records: list[dict]) -> str:
-    return json.dumps(records, ensure_ascii=False, indent=2, sort_keys=True)
-
-
-
+    """Список словарей → JSON: отступ 2, ключи по алфавиту, кириллица как есть."""
+    return json.dumps(records, indent=2, sort_keys=True, ensure_ascii=False)
 
 
       
