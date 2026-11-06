@@ -21,19 +21,27 @@ def csv_to_records(text: str) -> list[dict]:
 def _parse_value(value: str):
     """Приводит строковое значение YAML к типу: число, истина/ложь или строка."""
     value = value.strip()
+    if not value:
+        return value
+
     low = value.lower()
     if low in ("true", "yes"):
         return True
     if low in ("false", "no"):
         return False
+
     try:
         return int(value)
     except ValueError:
         pass
-    try:
-        return float(value)
-    except ValueError:
-        pass
+
+    # float только если разделитель — точка; "3,5" остаётся строкой
+    if "." in value:
+        try:
+            return float(value)
+        except ValueError:
+            pass
+
     return value
 
 
@@ -44,13 +52,13 @@ def parse_settings(lines: list[str]) -> dict:
     current_list: str | None = None
 
     for raw in lines:
-        # всё после # — комментарий, отбрасываем
+        # 1. Всё после # — комментарий, отбрасываем (сначала это, потом всё остальное)
         line = raw.split("#", 1)[0].rstrip()
         if not line.strip():
             continue
         stripped = line.strip()
 
-        # элемент списка
+        # 2. Элемент списка
         if stripped.startswith("- ") and current_list is not None:
             settings[current_list].append(_parse_value(stripped[2:]))
             continue
@@ -58,11 +66,13 @@ def parse_settings(lines: list[str]) -> dict:
         if ":" not in stripped:
             continue
 
+        # 3. Пара "ключ: значение"
         key, _, value = stripped.partition(":")
         key = key.strip()
         value = value.strip()
+
         if value == "":
-            # ключ без значения открывает список
+            # Ключ без значения открывает список
             settings[key] = []
             current_list = key
         else:
@@ -78,8 +88,7 @@ def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
     merged: list[dict] = []
     for row in rows:
         record = dict(row)
-        lookup = record.get(key)
-        addition = extra.get(lookup)
+        addition = extra.get(record.get(key))
         if addition is not None:
             # сначала справочник, потом запись — запись перекрывает
             record = {**addition, **record}
@@ -90,5 +99,3 @@ def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
 def records_to_json(records: list[dict]) -> str:
     """Список словарей -> JSON: отступ 2, ключи по алфавиту, кириллица как есть."""
     return json.dumps(records, ensure_ascii=False, indent=2, sort_keys=True)
-
-   
