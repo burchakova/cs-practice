@@ -33,8 +33,9 @@ def _parse_value(value: str):
         return False
     if re.fullmatch(r"[-+]?\d+", value):
         return int(value)
-    if re.fullmatch(r"[-+]?\d+\.\d+", value):
-        return float(value)
+    # Поддержка чисел с точкой и с запятой в качестве десятичного разделителя
+    if re.fullmatch(r"[-+]?\d+[.,]\d+", value):
+        return float(value.replace(",", "."))
     return value
 
 
