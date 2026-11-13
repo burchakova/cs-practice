@@ -22,10 +22,9 @@ def csv_to_records(text: str) -> list[dict]:
 def _parse_value(value: str):
     """Приводит строковое значение к числу, bool или оставляет строкой."""
     value = value.strip()
-    low = value.lower()
-    if low in ("true", "yes"):
+    if value in ("true", "yes"):
         return True
-    if low in ("false", "no"):
+    if value in ("false", "no"):
         return False
     try:
         return int(value)
@@ -36,6 +35,7 @@ def _parse_value(value: str):
     except ValueError:
         pass
     return value
+
 
 
 def parse_settings(lines: list[str]) -> dict:
