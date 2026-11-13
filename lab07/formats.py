@@ -33,17 +33,17 @@ def _parse_value(value: str):
         return False
     if re.fullmatch(r"[-+]?\d+", value):
         return int(value)
-    if re.fullmatch(r"[-+]?\d+[.,]\d+", value):   # <- добавлена запятая
-        return float(value.replace(",", "."))      # <- замена перед float
+    if re.fullmatch(r"[-+]?\d+[.,]\d+", value):
+        return float(value.replace(",", "."))
     return value
-
 
 def parse_settings(lines: list[str]) -> dict:
     """Разбирает учебное подмножество YAML: пары «ключ: значение», списки, комментарии."""
     settings = {}
     current_list_key = None
     for line in lines:
-        line = line.split("#", 1)[0].rstrip()
+        # Комментарий начинается с # только в начале строки или после пробела
+        line = re.split(r"(?<=\s)#", line, maxsplit=1)[0].rstrip()
         if not line.strip():
             continue
         if current_list_key is not None and line.lstrip().startswith("- "):
