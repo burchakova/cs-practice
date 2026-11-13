@@ -1,102 +1,79 @@
+"""Работа с тремя форматами данных: CSV, простой YAML и JSON."""
+
 import json
 
+
 def csv_to_records(text: str) -> list[dict]:
-"""CSV с заголовком → список словарей. Значения остаются строками."""
-lines = [line for line in text.strip().splitlines() if line.strip()]
-if not lines:
-return []
-
-# Первая строка — заголовок
-header = [h.strip() for h in lines[0].split(",")]
-
-records = []
-for line in lines[1:]:
-# Разделяем по запятой и убираем пробелы
-values = [v.strip() for v in line.split(",")]
-records.append(dict(zip(header, values)))
-
-return records
+    """Разбирает CSV с заголовком в список словарей. Значения остаются строками."""
+    records = []
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        return records
+    headers = [h.strip() for h in lines[0].split(",")]
+    for line in lines[1:]:
+        values = [v.strip() for v in line.split(",")]
+        record = {}
+        for i, header in enumerate(headers):
+            record[header] = values[i] if i < len(values) else ""
+        records.append(record)
+    return records
 
 
-def _parse_scalar(value: str):
-"""Вспомогательная функция для преобразования типов YAML."""
-value = value.strip()
-
-# 1. Булевы значения
-if value in ("true", "yes"):
-return True
-if value in ("false", "no"):
-return False
-
-# 2. Целые числа
-try:
-return int(value)
-except ValueError:
-pass
-
-# 3. Дробные числа (только с точкой, как в задании)
-try:
-return float(value)
-except ValueError:
-pass
-
-# 4. Остальное — строка
-return value
+def _parse_value(value: str):
+    """Приводит строковое значение к числу, bool или оставляет строкой."""
+    value = value.strip()
+    low = value.lower()
+    if low in ("true", "yes"):
+        return True
+    if low in ("false", "no"):
+        return False
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
 
 
 def parse_settings(lines: list[str]) -> dict:
-"""Простой YAML: «ключ: значение», списки через «- », комментарии после #."""
-settings = {}
-current_list_key = None
-
-for raw in lines:
-# Всё после # отбрасывается
-line = raw.split("#", 1)[0].rstrip()
-if not line.strip():
-continue
-
-stripped = line.strip()
-
-# Элемент списка
-if stripped.startswith("- "):
-if current_list_key is not None:
-settings[current_list_key].append(_parse_scalar(stripped[2:]))
-continue
-
-if ":" not in stripped:
-continue
-
-# Ключ и значение
-key, _, value = stripped.partition(":")
-key = key.strip()
-value = value.strip()
-
-# Если значения нет — открываем список
-if not value:
-settings[key] = []
-current_list_key = key
-else:
-settings[key] = _parse_scalar(value)
-current_list_key = None
-
-return settings
+    """Разбирает учебное подмножество YAML: пары «ключ: значение», списки, комментарии."""
+    settings = {}
+    current_list_key = None
+    for line in lines:
+        line = line.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        if current_list_key is not None and line.lstrip().startswith("- "):
+            item = line.lstrip()[2:].strip()
+            settings[current_list_key].append(_parse_value(item))
+            continue
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        key = key.strip()
+        value = value.strip()
+        if value == "":
+            settings[key] = []
+            current_list_key = key
+        else:
+            settings[key] = _parse_value(value)
+            current_list_key = None
+    return settings
 
 
 def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
-"""Дополняет записи сведениями из словаря по значению ключа key."""
-result = []
-for row in rows:
-# Ищем значение ключа в текущей записи
-row_key = str(row.get(key, ""))
-addition = extra.get(row_key, {})
-
-# Поля самой записи важнее (row переопределяет addition)
-merged = {**addition, **row}
-result.append(merged)
-
-return result
+    """Дополняет записи сведениями из справочника extra по значению ключа key."""
+    merged = []
+    for row in rows:
+        record_key = row.get(key)
+        extra_data = extra.get(record_key, {}) if record_key is not None else {}
+        merged.append({**extra_data, **row})
+    return merged
 
 
 def records_to_json(records: list[dict]) -> str:
-"""Список словарей → JSON: отступ 2, ключи по алфавиту, кириллица как есть."""
-return json.dumps(records, indent=2, sort_keys=True, ensure_ascii=False) 
+    """Список словарей в JSON: отступ 2, ключи по алфавиту, кириллица без экранирования."""
+    return json.dumps(records, ensure_ascii=False, indent=2, sort_keys=True)
