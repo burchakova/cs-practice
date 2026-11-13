@@ -1,6 +1,7 @@
 """Работа с тремя форматами данных: CSV, простой YAML и JSON."""
 
 import json
+import re
 
 
 def csv_to_records(text: str) -> list[dict]:
@@ -19,6 +20,10 @@ def csv_to_records(text: str) -> list[dict]:
     return records
 
 
+_INT_RE = re.fullmatch(r"[-+]?\d+", "{v}")
+_FLOAT_RE = re.fullmatch(r"[-+]?\d+\.\d+", "{v}")
+
+
 def _parse_value(value: str):
     """Приводит строковое значение к числу, bool или оставляет строкой."""
     value = value.strip()
@@ -26,16 +31,11 @@ def _parse_value(value: str):
         return True
     if value in ("false", "no"):
         return False
-    try:
+    if re.fullmatch(r"[-+]?\d+", value):
         return int(value)
-    except ValueError:
-        pass
-    try:
+    if re.fullmatch(r"[-+]?\d+\.\d+", value):
         return float(value)
-    except ValueError:
-        pass
     return value
-
 
 
 def parse_settings(lines: list[str]) -> dict:
