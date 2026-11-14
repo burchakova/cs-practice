@@ -1,88 +1,116 @@
-"""Работа с тремя форматами данных: CSV, простой YAML и JSON."""
-
 import json
-import re
 
 
+# Разбирает CSV с заголовком в список словарей. Значения остаются строками.
 def csv_to_records(text: str) -> list[dict]:
-    """Разбирает CSV с заголовком в список словарей. Значения остаются строками."""
-    records = []
-    lines = [line for line in text.splitlines() if line.strip()]
-    if not lines:
-        return records
-    headers = [h.strip() for h in lines[0].split(",")]
-    for line in lines[1:]:
-        values = [v.strip() for v in line.split(",")]
-        record = {}
-        for i, header in enumerate(headers):
-            record[header] = values[i] if i < len(values) else ""
-        records.append(record)
-    return records
+    result = []
+    keys = []
+
+    formated_text = text.strip().splitlines()
+
+    if len(formated_text) == 0:
+        return result
+
+    for key in formated_text[0].split(","):
+        keys.append(key.strip())
+
+    for line in formated_text[1:]:
+        fragment = {}
+
+        for i, value in enumerate(line.split(",")):
+            fragment[keys[i]] = value.strip()
+
+        result.append(fragment)
+
+    return result
 
 
-def _parse_value(value: str):
-    """Преобразует строку в int, float, bool или None; иначе оставляет строкой."""
-    value = value.strip().strip("'\"")  # снимаем кавычки, если есть
-    if value == "":
-        return None
-
-    # Целое число: допускаем знак, но не точку и не буквы
-    if value.lstrip("+-").isdigit():
-        return int(value)
-
-    # Вещественное число: 3.14, -0.5, 1e6
-    try:
-        return float(value)
-    except ValueError:
-        pass
-
-    # Булевы значения
-    if value.lower() in ("true", "yes"):
-        return True
-    if value.lower() in ("false", "no"):
-        return False
-    if value.lower() == "null":
-        return None
-
-    return value
-
-
+# Простой YAML: «ключ: значение», списки через «- », комментарии после #.
 def parse_settings(lines: list[str]) -> dict:
-    """Разбирает учебное подмножество YAML: пары «ключ: значение», списки, комментарии."""
-    settings = {}
-    current_list_key = None
+    result = {}
+    current_key = None
+
     for line in lines:
-        # Отбрасываем всё после # (комментарий)
-        line = line.split("#", 1)[0].rstrip()
-        if not line.strip():
+        line = line.split("#", 1)[0].strip()
+
+        if line == "":
             continue
-        if current_list_key is not None and line.lstrip().startswith("- "):
-            item = line.lstrip()[2:].strip()
-            settings[current_list_key].append(_parse_value(item))
+
+        if line.startswith("- "):
+            value = line[2:]
+
+            match value:
+                case "true" | "yes":
+                    value = True
+                case "false" | "no":
+                    value = False
+                case _:
+                    try:
+                        value = int(value)
+                    except ValueError:
+                        try:
+                            value = float(value.replace(',', '.'))
+                        except ValueError:
+                            if value.startswith('"') and value.endswith('"'):
+                                value = value[1:-1]
+                            elif value.startswith("'") and value.endswith("'"):
+                                value = value[1:-1]
+
+            result[current_key].append(value)
             continue
-        if ":" not in line:
-            continue
-        key, _, value = line.partition(":")
+
+        key, value = line.split(":", 1)
         key = key.strip()
         value = value.strip()
+
         if value == "":
-            settings[key] = []
-            current_list_key = key
-        else:
-            settings[key] = _parse_value(value)
-            current_list_key = None
-    return settings
+            result[key] = []
+            current_key = key
+            continue
 
+        current_key = None
+
+        match value:
+            case "true" | "yes":
+                value = True
+            case "false" | "no":
+                value = False
+            case _:
+                try:
+                    value = int(value)
+                except ValueError:
+                    try:
+                        value = float(value.replace(',', '.'))
+                    except ValueError:
+                        if value.startswith('"') and value.endswith('"'):
+                            value = value[1:-1]
+                        elif value.startswith("'") and value.endswith("'"):
+                            value = value[1:-1]
+
+        result[key] = value
+
+    return result
+
+
+# Дополняет записи сведениями из словаря по значению ключа key.
 def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
-    """Дополняет записи сведениями из справочника extra по значению ключа key."""
-    merged = []
+    result = []
+
     for row in rows:
-        record_key = row.get(key)
-        extra_data = extra.get(record_key, {}) if record_key is not None else {}
-        merged.append({**extra_data, **row})
-    return merged
+        fragment = {}
+
+        if row[key] in extra:
+            for name, value in extra[row[key]].items():
+                fragment[name] = value
+
+        for name, value in row.items():
+            fragment[name] = value
+
+        result.append(fragment)
+
+    return result
 
 
+# Список словарей в JSON: отступ 2, ключи по алфавиту, кириллица как есть.
 def records_to_json(records: list[dict]) -> str:
-    """Список словарей в JSON: отступ 2, ключи по алфавиту, кириллица без экранирования."""
     return json.dumps(records, ensure_ascii=False, indent=2, sort_keys=True)
