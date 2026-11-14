@@ -21,16 +21,29 @@ def csv_to_records(text: str) -> list[dict]:
 
 
 def _parse_value(value: str):
-    """Приводит строковое значение к числу, bool или оставляет строкой."""
-    value = value.strip()
-    if value in ("true", "yes"):
-        return True
-    if value in ("false", "no"):
-        return False
-    if re.fullmatch(r"[-+]?\d+", value):
+    """Преобразует строку в int, float, bool или None; иначе оставляет строкой."""
+    value = value.strip().strip("'\"")  # снимаем кавычки, если есть
+    if value == "":
+        return None
+
+    # Целое число: допускаем знак, но не точку и не буквы
+    if value.lstrip("+-").isdigit():
         return int(value)
-    if re.fullmatch(r"[-+]?\d+\.\d+", value):  # только точка, не запятая
+
+    # Вещественное число: 3.14, -0.5, 1e6
+    try:
         return float(value)
+    except ValueError:
+        pass
+
+    # Булевы значения
+    if value.lower() in ("true", "yes"):
+        return True
+    if value.lower() in ("false", "no"):
+        return False
+    if value.lower() == "null":
+        return None
+
     return value
 
 
@@ -59,7 +72,6 @@ def parse_settings(lines: list[str]) -> dict:
             settings[key] = _parse_value(value)
             current_list_key = None
     return settings
-
 
 def merge_by_key(rows: list[dict], extra: dict, key: str = "id") -> list[dict]:
     """Дополняет записи сведениями из справочника extra по значению ключа key."""
