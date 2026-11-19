@@ -66,3 +66,4 @@ def celsius_to_fahrenheit(values: list[float]) -> list[float]:
     fahrenheit = arr * 9 / 5 + 32
     
     return fahrenheit.tolist()
+
